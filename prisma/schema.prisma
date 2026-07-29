@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  GOVERNMENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  REVIEWING
+  CLOSED
+  DISPUTED
+}
+
+enum ReasonType {
+  BOHONG
+  AKAL_AKALAN
+  TIDAK_SESUAI
+  OTHER
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  name         String?
+  role         Role           @default(USER)
+  department   String?        // For government users
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  tickets      Ticket[]
+  verifications Verification[]
+  statusChanges StatusHistory[] @relation("ChangedBy")
+  evidences    Evidence[]
+}
+
+model Ticket {
+  id             String       @id @default(cuid())
+  title          String
+  description    String
+  lat            Float
+  lng            Float
+  address        String?
+  status         TicketStatus @default(OPEN)
+  integrityScore Float?       // Calculated based on verifications
+  
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  evidences      Evidence[]
+  verifications  Verification[]
+  statusHistory  StatusHistory[]
+}
+
+model Evidence {
+  id           String   @id @default(cuid())
+  ticketId     String
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  imageUrl     String
+  description  String?
+  uploaderRole Role     // USER or GOVERNMENT
+  uploaderId   String
+  uploader     User     @relation(fields: [uploaderId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Verification {
+  id             String      @id @default(cuid())
+  ticketId       String
+  ticket         Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  isSatisfied    Boolean
+  reasonType     ReasonType? // Only filled if isSatisfied is false
+  witnessComment String?
+  isWitness      Boolean     @default(false) // True if user is within 500m radius
+  createdAt      DateTime    @default(now())
+
+  @@unique([ticketId, userId]) // One verification per user per ticket
+}
+
+model StatusHistory {
+  id             String       @id @default(cuid())
+  ticketId       String
+  ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  previousStatus TicketStatus
+  newStatus      TicketStatus
+  changedById    String
+  changedBy      User         @relation("ChangedBy", fields: [changedById], references: [id])
+  reason         String?
+  createdAt      DateTime     @default(now())
+}
